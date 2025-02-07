@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect, useCallback } from "react";
 import { useAppContext } from "../contexts/AppContext";
 import { useNavigate } from "react-router-dom";
+import { useSocket } from "../contexts/Socket";
 
 function InputPage() {
   const {
@@ -11,15 +12,29 @@ function InputPage() {
     rememberMe,
     setRememberMe
   } = useAppContext();
-  
+  const { socket } = useSocket();
   const navigate = useNavigate();
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (userName && userInterest) {
-      navigate('/video');
+      socket.emit("joinRoom", { emailId: userName, roomId: userInterest });
     }
   };
+
+  const handleRoomJoined = useCallback(({roomId}) => {
+    console.log("joinedRoom received from server", roomId);
+    navigate(`/video/${roomId}`);
+  }, [socket, navigate]);
+
+
+  useEffect(() => {
+    socket.on("joinedRoom", handleRoomJoined); 
+
+    return () => {
+      socket.off("joinedRoom", handleRoomJoined);
+    }
+  }, [socket]);
 
   return (
     <div className="w-full max-w-md mx-auto px-6 py-4">

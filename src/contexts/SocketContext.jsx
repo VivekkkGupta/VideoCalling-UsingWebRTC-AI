@@ -7,6 +7,7 @@ export const useSocket = () => {
   const socket = useContext(SocketContext);
   return socket;  
 };
+const codespacesUri= "https://10.0.1.38:8000";
 
 export const SocketProvider = (props) => {
   const socket = useMemo(() => io("localhost:8000"), []);

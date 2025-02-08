@@ -45,7 +45,7 @@ function VideoCall() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userName, socket]);
 
   const handleIncommingCall = useCallback(
     async ({ from, fromEmail, offer }) => {
@@ -78,54 +78,18 @@ function VideoCall() {
   );
 
   const sendStreams = useCallback(async () => {
+    if (!myStream) {
+      setError("No local stream available");
+      return;
+    }
+    if (!peer.peer) {
+      console.error("Peer connection not initialized");
+      return;
+    }
     try {
       for (const track of myStream.getTracks()) {
         peer.peer.addTrack(track, myStream);
       }
-      // First, get all transceivers and set their direction
-      // peer.peer.getTransceivers().forEach(transceiver => {
-      //   transceiver.direction = 'sendrecv';
-      // });
-
-      // const senders = peer.peer.getSenders();
-
-      // for (const track of myStream.getTracks()) {
-      //   const existingSender = senders.find(sender => sender.track?.kind === track.kind);
-
-      //   if (existingSender) {
-      //     // Replace existing track and explicitly set the stream
-      //     console.log(`Replacing ${track.kind} track`);
-      //     await existingSender.replaceTrack(track);
-      //     // Make sure the sender knows about the stream
-      //     existingSender.setStreams(myStream);
-      //   } else {
-      //     // Add new track with explicit stream reference
-      //     console.log(`Adding new ${track.kind} track`);
-      //     peer.peer.addTrack(track, myStream);
-      //   }
-      // }
-
-      // // Log the updated state
-      // console.log("Streams updated successfully");
-      // peer.peer.getTransceivers().forEach((transceiver, index) => {
-      //   console.log(`Transceiver ${index}:`, {
-      //     direction: transceiver.direction,
-      //     sender: {
-      //       track: {
-      //         id: transceiver.sender.track?.id,
-      //         kind: transceiver.sender.track?.kind
-      //       },
-      //       streams: transceiver.sender.streams?.map(s => s.id)
-      //     },
-      //     receiver: {
-      //       track: {
-      //         id: transceiver.receiver.track?.id,
-      //         kind: transceiver.receiver.track?.kind
-      //       },
-      //       streams: transceiver.receiver.track?.streams?.map(s => s.id)
-      //     }
-      //   });
-      // });
     } catch (err) {
       setError(err.message || "Failed to send media streams");
       console.error("Send streams error:", err);
@@ -135,6 +99,7 @@ function VideoCall() {
   const handleCallAccepted = useCallback(async ({ from, ans }) => {
     try {
       await peer.setLocalDescription(ans);
+      
       setCallStatus("connected");
 
       // if (!firstUser) {
@@ -145,7 +110,7 @@ function VideoCall() {
       setError(err.message || "Failed to establish connection");
       console.error("Call acceptance error:", err);
     }
-  }, []);
+  }, [sendStreams, firstUser]);
 
   const handleNegoNeeded = useCallback(async () => {
     console.log("negotiationneeded event triggered");
@@ -154,9 +119,14 @@ function VideoCall() {
   }, [remoteSocketId, socket]);
 
   useEffect(() => {
-    peer.peer.addEventListener("negotiationneeded", handleNegoNeeded);
+    if (!peer.peer) {
+      console.error("Peer connection not initialized");
+      return;
+    }
+    const peerInstance = peer.peer;
+    peerInstance.addEventListener("negotiationneeded", handleNegoNeeded);
     return () => {
-      peer.peer.removeEventListener("negotiationneeded", handleNegoNeeded);
+      peerInstance.removeEventListener("negotiationneeded", handleNegoNeeded);
     };
   }, [handleNegoNeeded]);
 
@@ -180,18 +150,25 @@ function VideoCall() {
     setRemoteStream(remoteStream);
   }, []);
 
-  const sendTracksToOtherUser = useCallback((from)=>{
-    console.log("from socket id : ",from);
-    if(firstUser){
-      sendStreams()
-    }
-  },[])
+  const sendTracksToOtherUser = useCallback(() => {
+    sendStreams();
+  }, [sendStreams]);
+
 
   useEffect(() => {
-    peer.peer.addEventListener("track", handleTrackEvent);
+    if (!peer.peer) {
+      console.error("Peer connection not initialized");
+      return;
+    }
+    const peerInstance = peer.peer;
+    peerInstance.addEventListener("track", handleTrackEvent);
     return () => {
-      peer.peer.removeEventListener("track", handleTrackEvent);
+      peerInstance.removeEventListener("track", handleTrackEvent);
+      if (myStream) {
+        myStream.getTracks().forEach(track => track.stop());
+      }
     };
+
   }, [handleTrackEvent]);
 
   useEffect(() => {
@@ -209,7 +186,6 @@ function VideoCall() {
       socket.off("peer:nego:needed", handleNegoNeedIncomming);
       socket.off("peer:nego:final", handleNegoNeedFinal);
       socket.off("peer:nego:completedsendtracks", sendTracksToOtherUser);
-
     };
   }, [
     socket,
@@ -218,9 +194,14 @@ function VideoCall() {
     handleCallAccepted,
     handleNegoNeedIncomming,
     handleNegoNeedFinal,
+    sendTracksToOtherUser,
   ]);
 
   useEffect(() => {
+    if (!peer.peer) {
+      console.error("Peer connection not initialized");
+      return;
+    }
     if (
       remoteEmail &&
       remoteSocketId &&
@@ -232,7 +213,7 @@ function VideoCall() {
       console.log("localDescription : ", peer.peer.localDescription);
       console.log("remoteDescription : ", peer.peer.remoteDescription);
       console.log("--------------------------");
-      if (myStream && !firstUser) {
+      if (myStream) {
         sendStreams();
       }
     }
@@ -245,17 +226,6 @@ function VideoCall() {
     firstUser,
   ]);
 
-  // useEffect(()=>{
-  //   if(firstUser){
-  //     sendStreams()
-  //   }
-  // },[handleNegoNeedFinal])
-
-  // useEffect(() => {
-  //   if(myStream && firstUser){
-  //     sendStreams()
-  //   }
-  // }, [myStream, firstUser]);
 
   return (
     <div className="w-full h-full flex flex-col">
@@ -273,15 +243,11 @@ function VideoCall() {
                 {myStream ? (
                   <>
                     <div className="absolute inset-0">
-                      <ReactPlayer
-                        url={myStream}
-                        playing
-                        muted
-                        width="100%"
-                        height="100%"
-                        playsinline
-                        style={{ objectFit: "cover" }}
-                      />
+                      <video ref={(video) => video && (video.srcObject = myStream)} 
+                      autoPlay muted 
+                      className="w-full h-full object-cover" />
+
+
                     </div>
                     <div className="absolute bottom-4 left-4 bg-black/50 px-3 py-1 rounded-full">
                       <p className="text-white text-sm font-medium">
@@ -323,14 +289,11 @@ function VideoCall() {
                 {remoteStream ? (
                   <>
                     <div className="absolute inset-0">
-                      <ReactPlayer
-                        url={remoteStream}
-                        playing
-                        width="100%"
-                        height="100%"
-                        playsinline
-                        style={{ objectFit: "cover" }}
-                      />
+                      <video ref={(video) => video && (video.srcObject = remoteStream)}
+                        autoPlay muted
+                        className="w-full h-full object-cover" />
+
+
                     </div>
                     <div className="absolute bottom-4 left-4 bg-black/50 px-3 py-1 rounded-full">
                       <p className="text-white text-sm font-medium">
@@ -368,7 +331,11 @@ function VideoCall() {
                           </div>
                           <p className="font-semibold">{error}</p>
                           <button
-                            onClick={() => setError(null)}
+                            onClick={() => {
+                              setError(null);
+                              setLoading(false);
+                              setCallStatus("idle");
+                            }}
                             className="mt-2 text-sm underline hover:text-red-400"
                           >
                             Try Again

@@ -1,7 +1,7 @@
 import React, { useEffect, useCallback } from "react";
 import { useAppContext } from "../contexts/AppContext";
 import { useNavigate } from "react-router-dom";
-import { useSocket } from "../contexts/Socket";
+import { useSocket } from "../contexts/SocketContext";
 
 function InputPage() {
   const {
@@ -12,29 +12,58 @@ function InputPage() {
     rememberMe,
     setRememberMe
   } = useAppContext();
-  const { socket } = useSocket();
+
+  const socket = useSocket();
   const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (userName && userInterest) {
-      socket.emit("joinRoom", { emailId: userName, roomId: userInterest });
+
+  // Load saved data from localStorage on component mount
+  useEffect(() => {
+    const savedData = localStorage.getItem('somegleUserData');
+    if (savedData) {
+      const { userName: savedName, userInterest: savedInterest, rememberMe: savedRemember } = JSON.parse(savedData);
+      setUserName(savedName || '');
+      setUserInterest(savedInterest || '');
+      setRememberMe(savedRemember || false);
+    }
+  }, []);
+
+  // Save data to localStorage when rememberMe is true
+  const saveToLocalStorage = (name, interest, remember) => {
+    if (remember) {
+      localStorage.setItem('somegleUserData', JSON.stringify({
+        userName: name,
+        userInterest: interest,
+        rememberMe: remember
+      }));
+    } else {
+      localStorage.removeItem('somegleUserData');
     }
   };
 
-  const handleRoomJoined = useCallback(({roomId}) => {
-    console.log("joinedRoom received from server", roomId);
-    navigate(`/video/${roomId}`);
-  }, [socket, navigate]);
+  const handleSubmit = useCallback((e) => {
+    e.preventDefault();
+    if (userName && userInterest) {
+      saveToLocalStorage(userName, userInterest, rememberMe);
+      socket.emit("room:join", { email: userName, room: userInterest });
+    }
+  }, [socket, userName, userInterest]);
 
+
+  const handleJoinRoom = useCallback(
+    (data) => {
+      const { email, room } = data;
+      navigate(`/room/${room}`);
+    },
+    [navigate]
+  );
 
   useEffect(() => {
-    socket.on("joinedRoom", handleRoomJoined); 
-
+    socket.on("room:join", handleJoinRoom);
     return () => {
-      socket.off("joinedRoom", handleRoomJoined);
-    }
-  }, [socket]);
+      socket.off("room:join", handleJoinRoom);
+    };
+  }, [socket, handleJoinRoom]);
 
   return (
     <div className="w-full max-w-md mx-auto px-6 py-4">

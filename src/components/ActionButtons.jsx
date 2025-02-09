@@ -34,7 +34,7 @@ function ActionButtons() {
   };
 
   return (
-    <div className="p-4 bg-white border-t flex justify-center gap-4">
+    <div className="p-4 bg-gray-700 rounded-2xl flex justify-center gap-4">
       <button
         onClick={() => setMic(!mic)}
         className={`p-3 rounded-full ${mic ? 'bg-blue-500' : 'bg-gray-300'}`}

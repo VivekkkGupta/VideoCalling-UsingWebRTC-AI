@@ -16,7 +16,6 @@ function InputPage() {
   const socket = useSocket();
   const navigate = useNavigate();
 
-
   // Load saved data from localStorage on component mount
   useEffect(() => {
     const savedData = localStorage.getItem('somegleUserData');
@@ -28,26 +27,26 @@ function InputPage() {
     }
   }, []);
 
-  // Save data to localStorage when rememberMe is true
-  const saveToLocalStorage = (name, interest, remember) => {
-    if (remember) {
-      localStorage.setItem('somegleUserData', JSON.stringify({
-        userName: name,
-        userInterest: interest,
-        rememberMe: remember
-      }));
-    } else {
-      localStorage.removeItem('somegleUserData');
-    }
-  };
 
   const handleSubmit = useCallback((e) => {
     e.preventDefault();
     if (userName && userInterest) {
-      saveToLocalStorage(userName, userInterest, rememberMe);
+      // Save to localStorage if rememberMe is checked
+      if (rememberMe) {
+        localStorage.setItem('somegleUserData', JSON.stringify({
+          userName,
+          userInterest,
+          rememberMe
+        }));
+      } else {
+        // Clear localStorage if rememberMe is unchecked
+        localStorage.removeItem('somegleUserData');
+      }
+      
+      // Emit socket event and continue with room join
       socket.emit("room:join", { email: userName, room: userInterest });
     }
-  }, [socket, userName, userInterest]);
+  }, [socket, userName, userInterest, rememberMe]);
 
 
   const handleJoinRoom = useCallback(
